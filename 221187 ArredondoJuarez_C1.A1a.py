@@ -8,6 +8,14 @@ from prettytable import PrettyTable
 import tkinter as tk
 from tkinter import messagebox, simpledialog, scrolledtext
 
+# Definir la función de aptitud (cambiar esta función según sea necesario)
+def fitness_function_x_cos_x(x):
+    return x * np.cos(x)
+
+
+# Establecer la función de aptitud actual
+fitness_function = fitness_function_x_cos_x
+
 # Calcular el número de bits necesarios para representar los valores
 def calculate_bit_length(start_value, end_value, precision):
     return math.ceil(math.log2((end_value - start_value) / precision + 1))
@@ -23,16 +31,16 @@ def binary_to_float(binary_str, min_value, max_value, bit_length):
     return min_value + int_value * (max_value - min_value) / (2**bit_length - 1)
 
 # Función de aptitud que evalúa a los individuos
-def fitness_function(individual, maximize, min_value, max_value, bit_length):
+def evaluate_fitness(individual, maximize, min_value, max_value, bit_length):
     x = binary_to_float(individual, min_value, max_value, bit_length)
-    f = x * np.cos(x)
+    f = fitness_function(x)
     return f if maximize else -f
 
 # Crear la población inicial
 def create_initial_population(count, min_value, max_value, bit_length):
     return [float_to_binary(random.uniform(min_value, max_value), min_value, max_value, bit_length) for _ in range(count)]
 
-# Estrategia A5: Selección de pares (90%) Todos con todos
+# Estrategia seleccion de pares A5:  Todos con todos
 def select_pairs(population):
     pairs = []
     n = len(population)
@@ -41,7 +49,7 @@ def select_pairs(population):
             pairs.append((population[i], population[j]))
     return pairs
 
-# Estrategia C1: Cruza (90%) Un punto de cruza aleatorio
+# Estrategia de cruza C1: Un punto de cruza aleatorio
 def crossover(pair, bit_length):
     crossover_point = random.randint(1, bit_length - 1)
     child1 = pair[0][:crossover_point] + pair[1][crossover_point:]
@@ -59,36 +67,40 @@ def mutate(individual, mutation_prob_gene, bit_length):
 # Estrategia P2: Poda (90%) Eliminación aleatoria asegurando mantener al mejor individuo
 def prune(population, max_population, min_value, max_value, maximize, bit_length):
     unique_population = list(set(population))
-    unique_population.sort(key=lambda ind: fitness_function(ind, maximize, min_value, max_value, bit_length), reverse=maximize)
+    unique_population.sort(key=lambda ind: evaluate_fitness(ind, maximize, min_value, max_value, bit_length), reverse=maximize)
     if len(unique_population) > max_population:
         best_individual = unique_population[0]
         to_keep = random.sample(unique_population[1:], max_population - 1)
         to_keep.append(best_individual)
         unique_population = to_keep
     statistics = {
-        "max": fitness_function(unique_population[0], maximize, min_value, max_value, bit_length),
-        "min": fitness_function(unique_population[-1], maximize, min_value, max_value, bit_length),
-        "average": sum(fitness_function(ind, maximize, min_value, max_value, bit_length) for ind in unique_population) / len(unique_population)
+        "max": evaluate_fitness(unique_population[0], maximize, min_value, max_value, bit_length),
+        "min": evaluate_fitness(unique_population[-1], maximize, min_value, max_value, bit_length),
+        "average": sum(evaluate_fitness(ind, maximize, min_value, max_value, bit_length) for ind in unique_population) / len(unique_population)
     }
     return unique_population, statistics
 
 # Graficar la función con los individuos
 def plot_function_with_individuals(x_values, y_values, individuals, best, worst, generation, folder, min_value, max_value, maximize, bit_length):
     plt.figure(figsize=(10, 5))
-    plt.plot(x_values, y_values, label='f(x) = x * cos(x)')
+    plt.plot(x_values, y_values, label=f'f(x) = {fitness_function.__name__}')
 
     x_individuals = [binary_to_float(ind, min_value, max_value, bit_length) for ind in individuals]
-    y_individuals = [x * np.cos(x) for x in x_individuals]
+    y_individuals = [fitness_function(x) for x in x_individuals]
 
     plt.scatter(x_individuals, y_individuals, color='blue', label='Individuos', alpha=0.6)
 
     best_x = binary_to_float(best, min_value, max_value, bit_length)
-    best_y = best_x * np.cos(best_x)
-    plt.scatter([best_x], [best_y], color='green', label='Mejor Individuo', s=100, edgecolor='black')
-
+    best_y = fitness_function(best_x)
     worst_x = binary_to_float(worst, min_value, max_value, bit_length)
-    worst_y = worst_x * np.cos(worst_x)
-    plt.scatter([worst_x], [worst_y], color='red', label='Peor Individuo', s=100, edgecolor='black')
+    worst_y = fitness_function(worst_x)
+
+    if maximize:
+        plt.scatter([best_x], [best_y], color='green', label='Mejor Individuo', s=100, edgecolor='black')
+        plt.scatter([worst_x], [worst_y], color='red', label='Peor Individuo', s=100, edgecolor='black')
+    else:
+        plt.scatter([best_x], [best_y], color='red', label='Peor Individuo', s=100, edgecolor='black')
+        plt.scatter([worst_x], [worst_y], color='green', label='Mejor Individuo', s=100, edgecolor='black')
 
     plt.xlabel('x')
     plt.ylabel('f(x)')
@@ -142,8 +154,44 @@ def create_video(folder, generations_count):
     cv2.destroyAllWindows()
     video.release()
 
+# Validar entradas del usuario
+def validate_entries():
+    try:
+        start_value = float(entry_start_value.get())
+        end_value = float(entry_end_value.get())
+        precision = float(entry_precision.get())
+        generations_count = int(entry_generations_count.get())
+        mutation_prob_gene = float(entry_mutation_prob_gene.get())
+        individuals_count = int(entry_individuals_count.get())
+        max_population = int(entry_max_population.get())
+        crossover_rate = float(entry_crossover_rate.get())
+        
+        if end_value < start_value:
+            messagebox.showerror("Error de Validación", "El valor final no puede ser menor que el valor inicial.")
+            return False
+        if not (0 < precision <= 1):
+            messagebox.showerror("Error de Validación", "Delta X debe estar entre 0 y 1.")
+            return False
+        if not (0 <= mutation_prob_gene <= 1):
+            messagebox.showerror("Error de Validación", "La probabilidad de mutación del gen debe estar entre 0 y 1.")
+            return False
+        if not (0 <= crossover_rate <= 1):
+            messagebox.showerror("Error de Validación", "La tasa de cruza debe estar entre 0 y 1.")
+            return False
+        if generations_count <= 0 or individuals_count <= 0 or max_population <= 0:
+            messagebox.showerror("Error de Validación", "El número de generaciones, individuos y población máxima deben ser números enteros positivos.")
+            return False
+
+        return True
+    except ValueError:
+        messagebox.showerror("Error de Validación", "Por favor, ingrese valores válidos en todos los campos.")
+        return False
+
 # Ejecutar el algoritmo genético
 def run_genetic_algorithm():
+    if not validate_entries():
+        return
+
     # Obtener los valores ingresados por el usuario
     start_value = float(entry_start_value.get())
     end_value = float(entry_end_value.get())
@@ -165,9 +213,9 @@ def run_genetic_algorithm():
     if not os.path.exists(plots_folder):
         os.makedirs(plots_folder)
 
-    # Generar los valores x e y para la función f(x)
+    # Generar los valores x e y para la función f(y)
     x_values = np.linspace(min_value, max_value, 400)
-    y_values = x_values * np.cos(x_values)
+    y_values = [fitness_function(x) for x in x_values]
 
     # Crear la población inicial
     population = create_initial_population(individuals_count, min_value, max_value, bit_length)
@@ -179,7 +227,7 @@ def run_genetic_algorithm():
 
     # Iterar a través de las generaciones
     for generation in range(generations_count + 1):
-        fitnesses = [fitness_function(ind, maximize, min_value, max_value, bit_length) for ind in population]
+        fitnesses = [evaluate_fitness(ind, maximize, min_value, max_value, bit_length) for ind in population]
         best_fitness = max(fitnesses) if maximize else min(fitnesses)
         worst_fitness = min(fitnesses) if maximize else max(fitnesses)
         average_fitness = sum(fitnesses) / len(fitnesses)
@@ -190,13 +238,16 @@ def run_genetic_algorithm():
 
         best_individual = population[fitnesses.index(best_fitness)]
         best_x_value = binary_to_float(best_individual, min_value, max_value, bit_length)
+        worst_individual = population[fitnesses.index(worst_fitness)]
 
         # Crear una tabla con los resultados de la generación actual
         table = PrettyTable()
         table.field_names = ["Generación", "Cadena de Bits", "Índice", "Valor de x", "Valor de Aptitud"]
         table.add_row([generation, best_individual, fitnesses.index(best_fitness), round(best_x_value, 3), round(best_fitness, 3)])
         results_text.insert(tk.END, table.get_string() + "\n")
-        results_text.insert(tk.END, f"Generación {generation}: Mejor = {round(best_fitness, 3)}, Peor = {round(worst_fitness, 3)}, Media = {round(average_fitness, 3)}\n")
+
+        # Graficar la función con los individuos de la generación actual
+        plot_function_with_individuals(x_values, y_values, population, best_individual, worst_individual, generation, plots_folder, min_value, max_value, maximize, bit_length)
         
         # Si no es la última generación, continuar con la cruza y mutación
         if generation < generations_count:
