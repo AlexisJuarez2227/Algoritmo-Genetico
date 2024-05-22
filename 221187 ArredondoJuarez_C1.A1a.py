@@ -9,12 +9,11 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog, scrolledtext
 
 # Definir la función de aptitud (cambiar esta función según sea necesario)
-def fitness_function_x_cos_x(x):
-    return x * np.cos(x)
-
+def fitness_function_log_cos_x(x):
+    return np.log(abs(0.5 + 2 * x)) + 3 * np.cos(x)
 
 # Establecer la función de aptitud actual
-fitness_function = fitness_function_x_cos_x
+fitness_function = fitness_function_log_cos_x
 
 # Calcular el número de bits necesarios para representar los valores
 def calculate_bit_length(start_value, end_value, precision):
@@ -40,7 +39,7 @@ def evaluate_fitness(individual, maximize, min_value, max_value, bit_length):
 def create_initial_population(count, min_value, max_value, bit_length):
     return [float_to_binary(random.uniform(min_value, max_value), min_value, max_value, bit_length) for _ in range(count)]
 
-# Estrategia seleccion de pares A5:  Todos con todos
+# Estrategia seleccion de pares A5: Todos con todos
 def select_pairs(population):
     pairs = []
     n = len(population)
@@ -56,15 +55,17 @@ def crossover(pair, bit_length):
     child2 = pair[1][:crossover_point] + pair[0][crossover_point:]
     return child1, child2
 
-# Estrategia M1: Mutación (100%) Negación del bit
-def mutate(individual, mutation_prob_gene, bit_length):
-    individual = list(individual)
-    for i in range(bit_length):
-        if random.random() < mutation_prob_gene:
-            individual[i] = '1' if individual[i] == '0' else '0'
-    return ''.join(individual)
+# Estrategia M1: Mutación Negación del bit
+def mutate(individual, mutation_prob_gene, mutation_prob_individual, bit_length):
+    if random.random() < mutation_prob_individual:
+        individual = list(individual)
+        for i in range(bit_length):
+            if random.random() < mutation_prob_gene:
+                individual[i] = '1' if individual[i] == '0' else '0'
+        return ''.join(individual)
+    return individual
 
-# Estrategia P2: Poda (90%) Eliminación aleatoria asegurando mantener al mejor individuo
+# Estrategia P2: Poda Eliminación aleatoria asegurando mantener al mejor individuo
 def prune(population, max_population, min_value, max_value, maximize, bit_length):
     unique_population = list(set(population))
     unique_population.sort(key=lambda ind: evaluate_fitness(ind, maximize, min_value, max_value, bit_length), reverse=maximize)
@@ -162,9 +163,9 @@ def validate_entries():
         precision = float(entry_precision.get())
         generations_count = int(entry_generations_count.get())
         mutation_prob_gene = float(entry_mutation_prob_gene.get())
+        mutation_prob_individual = float(entry_mutation_prob_individual.get())
         individuals_count = int(entry_individuals_count.get())
         max_population = int(entry_max_population.get())
-        crossover_rate = float(entry_crossover_rate.get())
         
         if end_value < start_value:
             messagebox.showerror("Error de Validación", "El valor final no puede ser menor que el valor inicial.")
@@ -175,8 +176,8 @@ def validate_entries():
         if not (0 <= mutation_prob_gene <= 1):
             messagebox.showerror("Error de Validación", "La probabilidad de mutación del gen debe estar entre 0 y 1.")
             return False
-        if not (0 <= crossover_rate <= 1):
-            messagebox.showerror("Error de Validación", "La tasa de cruza debe estar entre 0 y 1.")
+        if not (0 <= mutation_prob_individual <= 1):
+            messagebox.showerror("Error de Validación", "La probabilidad de mutación del individuo debe estar entre 0 y 1.")
             return False
         if generations_count <= 0 or individuals_count <= 0 or max_population <= 0:
             messagebox.showerror("Error de Validación", "El número de generaciones, individuos y población máxima deben ser números enteros positivos.")
@@ -199,9 +200,9 @@ def run_genetic_algorithm():
     generations_count = int(entry_generations_count.get())
     maximize = var_maximize.get() == 1
     mutation_prob_gene = float(entry_mutation_prob_gene.get())
+    mutation_prob_individual = float(entry_mutation_prob_individual.get())
     individuals_count = int(entry_individuals_count.get())
     max_population = int(entry_max_population.get())
-    crossover_rate = float(entry_crossover_rate.get())
 
     # Calcular la longitud de bits necesaria para representar los valores
     bit_length = calculate_bit_length(start_value, end_value, precision)
@@ -225,7 +226,7 @@ def run_genetic_algorithm():
 
     results_text.delete('1.0', tk.END)
 
-    # Iterar a través de las generaciones
+    # Iterar(generar) a través de las generaciones
     for generation in range(generations_count + 1):
         fitnesses = [evaluate_fitness(ind, maximize, min_value, max_value, bit_length) for ind in population]
         best_fitness = max(fitnesses) if maximize else min(fitnesses)
@@ -255,13 +256,13 @@ def run_genetic_algorithm():
             new_population = []
 
             for pair in pairs:
-                if random.random() < crossover_rate:
+                if random.random() < random.random():  # Tasa de cruza aleatoria
                     offspring = crossover(pair, bit_length)
                     new_population.extend(offspring)
                 else:
                     new_population.extend(pair)
 
-            new_population = [mutate(ind, mutation_prob_gene, bit_length) for ind in new_population]
+            new_population = [mutate(ind, mutation_prob_gene, mutation_prob_individual, bit_length) for ind in new_population]
             population = [ind for ind in new_population if min_value <= binary_to_float(ind, min_value, max_value, bit_length) <= max_value]
             population, stats = prune(population, max_population, min_value, max_value, maximize, bit_length)
             population.append(best_individual)
@@ -297,17 +298,17 @@ tk.Label(root, text="Probabilidad de Mutación del Gen:").grid(row=4, column=0, 
 entry_mutation_prob_gene = tk.Entry(root)
 entry_mutation_prob_gene.grid(row=4, column=1)
 
-tk.Label(root, text="Número de Individuos:").grid(row=5, column=0, sticky=tk.W)
+tk.Label(root, text="Probabilidad de Mutación del Individuo:").grid(row=5, column=0, sticky=tk.W)
+entry_mutation_prob_individual = tk.Entry(root)
+entry_mutation_prob_individual.grid(row=5, column=1)
+
+tk.Label(root, text="Número de Individuos:").grid(row=6, column=0, sticky=tk.W)
 entry_individuals_count = tk.Entry(root)
-entry_individuals_count.grid(row=5, column=1)
+entry_individuals_count.grid(row=6, column=1)
 
-tk.Label(root, text="Población Máxima:").grid(row=6, column=0, sticky=tk.W)
+tk.Label(root, text="Población Máxima:").grid(row=7, column=0, sticky=tk.W)
 entry_max_population = tk.Entry(root)
-entry_max_population.grid(row=6, column=1)
-
-tk.Label(root, text="Tasa de Cruza:").grid(row=7, column=0, sticky=tk.W)
-entry_crossover_rate = tk.Entry(root)
-entry_crossover_rate.grid(row=7, column=1)
+entry_max_population.grid(row=7, column=1)
 
 tk.Label(root, text="Maximizar Función:").grid(row=8, column=0, sticky=tk.W)
 var_maximize = tk.IntVar()
